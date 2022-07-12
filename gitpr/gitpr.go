@@ -106,6 +106,10 @@ func (b SyncPRRefSet) UpstreamMirrorRefspec() string {
 	return createRefspec(b.UpstreamLocalBranch(), b.UpstreamName)
 }
 
+func (b SyncPRRefSet) ForkFromMainRefspec(mainBranch string) string {
+	return createRefspec(mainBranch, b.Name)
+}
+
 // Remote is a parsed version of a Git Remote. It helps determine how to send a GitHub PR.
 type Remote struct {
 	url      string

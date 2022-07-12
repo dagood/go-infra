@@ -141,6 +141,9 @@ func Test_MakeBranchPRs_VersionUpdate(t *testing.T) {
 				BranchMap: map[string]string{
 					"main": "microsoft/main",
 				},
+				AutoSyncBranches: []string{
+					"main",
+				},
 				SubmoduleTarget:                "go",
 				GoVersionFileContent:           tt.version,
 				GoMicrosoftRevisionFileContent: tt.revision,
