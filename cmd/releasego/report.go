@@ -11,8 +11,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"sort"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/google/go-github/github"
@@ -37,13 +37,42 @@ const endReportDataMarker = "<!-- END " + reportDataMarker + " -->"
 const reportRetryTimeoutDuration = 5 * time.Minute
 const reportRetryDelayDuration = 5 * time.Second
 
-type reportTemplateArgs struct{
-	// Map of Version -> Pipeline Name -> build report
-	Reports map[string]map[string]buildReportPresentation
-}
-
 //go:embed templates/report.template.md
 var reportTemplate string
+
+type reportTemplateArgs struct {
+	// Map of Version -> Pipeline Name -> Build ID -> build report. text/template evaluation
+	// automatically sorts map keys, so we don't need to worry about it here.
+	Reports reportsByVersion
+}
+
+type reportsByVersion map[string]reportsByPipeline
+type reportsByPipeline map[string]reportsByBuildID
+type reportsByBuildID map[string]buildReportPresentation
+
+func newReportTemplateArgs(reports []buildReportPresentation) *reportTemplateArgs {
+	m := make(reportsByVersion)
+	var ok bool
+	for _, r := range reports {
+		var byPipeline reportsByPipeline
+		if byPipeline, ok = m[r.Version]; !ok {
+			byPipeline = make(reportsByPipeline)
+			m[r.Version] = byPipeline
+		}
+		byPipeline[r.BuildPipeline] = make(reportsByBuildID)
+
+		var byBuildID reportsByBuildID
+		if byBuildID, ok = byPipeline[r.BuildID]; !ok {
+			byBuildID = make(reportsByBuildID)
+			byPipeline[r.BuildID] = byBuildID
+		}
+
+		byBuildID[r.BuildID] = r
+	}
+	return &reportTemplateArgs{
+		Reports: m,
+	}
+}
 
 func handleReport(p subcmd.ParseFunc) error {
 	repo := githubutil.BindRepoFlag()
@@ -129,7 +158,10 @@ func handleReport(p subcmd.ParseFunc) error {
 
 			rc := parseReportComment(issueData.GetBody())
 			rc.update(report.present())
-			body := rc.body()
+			body, err := rc.body()
+			if err != nil {
+				return fmt.Errorf("unable to generate issue body: %v", err)
+			}
 
 			edit, _, err := client.Issues.Edit(ctx, owner, name, *issue, &github.IssueRequest{
 				Body: &body,
@@ -265,45 +297,19 @@ func (r *reportComment) update(report *buildReportPresentation) {
 	}
 }
 
-func (r *reportComment) body() string {
+func (r *reportComment) body() (string, error) {
 	var b strings.Builder
 	b.WriteString(r.before)
 	b.WriteString(beginReportDataMarker)
 
-	var args reportTemplateArgs
-
-	for _, report := range r.reports {
-		versionReports[report.Version] = append(versionReports[report.Version], report)
-		b.WriteString("* [" + report.BuildID + "](" + report.BuildURL + ")")
-		b.WriteString(" [retry instructions](" + report.BuildURL + "&view=ms.vss-build-web.run-extensions-tab)\n")
+	args := newReportTemplateArgs(r.reports)
+	t, err := template.New("report.template.md").Parse(reportTemplate)
+	if err != nil {
+		return "", err
 	}
-
-	sort.SliceStable(r.reports, func(i, j int) bool {
-		iv, jv := r.reports[i], r.reports[j]
-		if c := strings.Compare(iv.Version, jv.Version); c != 0 {
-			return c < 0
-		}
-		if c := strings.Compare(iv.BuildPipeline, jv.BuildPipeline); c != 0 {
-			return c < 0
-		}
-		if c := strings.Compare(iv.BuildID, jv.BuildID); c != 0 {
-			return c < 0
-		}
-		return false
-	})
-
-	var version, pipeline
-	for _, report := range r.reports {
-		if report.Version != version {
-			version = report.Version
-		}
+	if err := t.Execute(&b, args); err != nil {
+		return "", err
 	}
-
-	versions := make([]string, 0, len(versionReports))
-	for key, _ := range versionReports {
-		versions = append(versions, key)
-	}
-	sort.Strings(versions)
 
 	b.WriteString("<!-- DATA ")
 	bytes, err := json.MarshalIndent(r.reports, "", "  ")
@@ -316,7 +322,7 @@ func (r *reportComment) body() string {
 
 	b.WriteString(endReportDataMarker)
 	b.WriteString(r.after)
-	return b.String()
+	return b.String(), nil
 }
 
 func cutTwice(content, sep1, sep2 string) (before, between, after string, found bool) {
