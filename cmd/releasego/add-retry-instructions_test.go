@@ -30,7 +30,7 @@ func Test_generateContent(t *testing.T) {
 				t.Errorf("generateContent() error = %v", err)
 				return
 			}
-			checkGolden(t, filepath.Join("testdata", "retry-instructions", tt.name+".golden.md"), got)
+			checkGolden(t, "Test_generateContent ", filepath.Join("testdata", "retry-instructions", tt.name+".golden.md"), got)
 		})
 	}
 }
