@@ -1,4 +1,4 @@
-package main
+package goldentest
 
 import (
 	"flag"
@@ -9,7 +9,7 @@ import (
 
 var update = flag.Bool("update", false, "Update the golden files instead of failing.")
 
-func checkGolden(t *testing.T, runName, goldenPath, actual string) {
+func Check(t *testing.T, rerunCmd, goldenPath, actual string) {
 	if *update {
 		if err := os.MkdirAll(filepath.Dir(goldenPath), os.ModePerm); err != nil {
 			t.Fatal(err)
@@ -19,7 +19,7 @@ func checkGolden(t *testing.T, runName, goldenPath, actual string) {
 		}
 	}
 
-	runHelp := "Run 'go test ./cmd/releasego -run " + runName + " -update' to update golden file"
+	runHelp := "Run '" + rerunCmd + " -update' to update golden file"
 
 	want, err := os.ReadFile(goldenPath)
 	if err != nil {
