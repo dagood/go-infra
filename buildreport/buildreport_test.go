@@ -80,6 +80,7 @@ func Test_commentBody_body(t *testing.T) {
 				r("1.18.2-1-fips", "1239", "microsoft-go-infra-release-build", FailedSymbol),
 				r("1.18.2-1", "1233", "microsoft-go-infra-release-build", FailedSymbol),
 				r("1.18.2-1", "1300", "microsoft-go-infra-release-build", NotStartedSymbol),
+				r("1.18.2-1", "12345", "microsoft-go", FailedSymbol),
 			},
 		},
 		{"none", nil},
@@ -106,6 +107,11 @@ func Test_commentBody_body(t *testing.T) {
 }
 
 func Test_commentBody_body_UpdateExisting(t *testing.T) {
+	exampleTime, err := time.Parse(time.RFC3339, "2012-03-28T01:02:03Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	cb := commentBody{
 		reports: []State{
 			{
@@ -113,16 +119,16 @@ func Test_commentBody_body_UpdateExisting(t *testing.T) {
 				BuildPipeline: "microsoft-go",
 				BuildID:       "1234",
 				BuildSymbol:   InProgressSymbol,
+				// This test makes sure StartTime isn't updated, but BuildSymbol and LastUpdate are.
+				StartTime:  exampleTime,
+				LastUpdate: exampleTime,
 			},
 		},
 	}
 	cb.update(State{
-		BuildID: "1234",
-		// In practice, only the build symbol is expected to be updated, but test here that only the
-		// BuildID is matched for a successful update.
-		Version:       "1.2.4",
-		BuildPipeline: "microsoft-go-changed-name",
-		BuildSymbol:   SuccessSymbol,
+		BuildID:     "1234",
+		BuildSymbol: SuccessSymbol,
+		LastUpdate:  exampleTime.Add(time.Minute * 15),
 	})
 	got, err := cb.body()
 	if err != nil {

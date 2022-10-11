@@ -128,9 +128,28 @@ func parseReportComment(body string) commentBody {
 
 func (c *commentBody) update(report State) {
 	found := false
-	for i, r := range c.reports {
+	for i := range c.reports {
+		r := &c.reports[i]
 		if r.BuildID == report.BuildID {
-			c.reports[i] = report
+			// Update the found report by copying non-default fields.
+			if report.Version != "" {
+				r.Version = report.Version
+			}
+			if report.BuildPipeline != "" {
+				r.BuildPipeline = report.BuildPipeline
+			}
+			if report.BuildURL != "" {
+				r.BuildURL = report.BuildURL
+			}
+			if report.BuildSymbol != "" {
+				r.BuildSymbol = report.BuildSymbol
+			}
+			if report.LastUpdate != (time.Time{}) {
+				r.LastUpdate = report.LastUpdate
+			}
+			if report.StartTime != (time.Time{}) {
+				r.StartTime = report.StartTime
+			}
 			found = true
 			break
 		}
@@ -191,7 +210,10 @@ func (c *commentBody) body() (string, error) {
 		b.WriteString(")")
 		b.WriteString(" | ")
 		b.WriteString(r.BuildSymbol)
-		if r.BuildSymbol == FailedSymbol {
+		// If the build has failed (potentially needs retry) and is a release infra build (likely
+		// publishes retry information), then show a direct link. This detection might not be 100%
+		// accurate, but it's just a small convenience: it's ok to rely on a heuristic string match.
+		if r.BuildSymbol == FailedSymbol && strings.HasPrefix(r.BuildPipeline, "microsoft-go-infra-release-") {
 			b.WriteString(" [Retry](")
 			b.WriteString(r.BuildURL)
 			b.WriteString("&view=ms.vss-build-web.run-extensions-tab)")
@@ -222,6 +244,11 @@ func (c *commentBody) body() (string, error) {
 	b.WriteString(endDataSectionMarker)
 	b.WriteString(c.after)
 	return b.String(), nil
+}
+
+func SingleStateBody(s *State) (string, error) {
+	c := commentBody{reports: []State{*s}}
+	return c.body()
 }
 
 func cutTwice(content, sep1, sep2 string) (before, between, after string, found bool) {
