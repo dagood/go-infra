@@ -55,13 +55,13 @@ func Test_commentBody_body(t *testing.T) {
 
 	r := func(version, id, pipeline, symbol string) State {
 		b := State{
-			Version:       version,
-			BuildID:       id,
-			BuildPipeline: pipeline,
-			BuildURL:      "https://example.org/",
-			BuildSymbol:   symbol,
-			StartTime:     exampleTime,
-			LastUpdate:    exampleTime.Add(time.Minute * 5),
+			Version:    version,
+			ID:         id,
+			Name:       pipeline,
+			URL:        "https://example.org/",
+			Symbol:     symbol,
+			StartTime:  exampleTime,
+			LastUpdate: exampleTime.Add(time.Minute * 5),
 		}
 		return b
 	}
@@ -73,20 +73,20 @@ func Test_commentBody_body(t *testing.T) {
 		{
 			"realistic",
 			[]State{
-				r("1.18.2-1", "1234", "microsoft-go-infra-release-build", SuccessSymbol),
-				r("1.18.2-1", "1238", "microsoft-go-infra-release-build", InProgressSymbol),
-				r("1.18.2-1", "1500", "microsoft-go-infra-release-go-images", InProgressSymbol),
-				r("1.19.1-1", "1900", "microsoft-go-infra-release-build", NotStartedSymbol),
-				r("1.18.2-1-fips", "1239", "microsoft-go-infra-release-build", FailedSymbol),
-				r("1.18.2-1", "1233", "microsoft-go-infra-release-build", FailedSymbol),
-				r("1.18.2-1", "1300", "microsoft-go-infra-release-build", NotStartedSymbol),
-				r("1.18.2-1", "12345", "microsoft-go", FailedSymbol),
+				r("1.18.2-1", "1234", "microsoft-go-infra-release-build", ReportSymbolSucceeded),
+				r("1.18.2-1", "1238", "microsoft-go-infra-release-build", ReportSymbolInProgress),
+				r("1.18.2-1", "1500", "microsoft-go-infra-release-go-images", ReportSymbolInProgress),
+				r("1.19.1-1", "1900", "microsoft-go-infra-release-build", ReportSymbolNotStarted),
+				r("1.18.2-1-fips", "1239", "microsoft-go-infra-release-build", ReportSymbolFailed),
+				r("1.18.2-1", "1233", "microsoft-go-infra-release-build", ReportSymbolFailed),
+				r("1.18.2-1", "1300", "microsoft-go-infra-release-build", ReportSymbolNotStarted),
+				r("1.18.2-1", "12345", "microsoft-go", ReportSymbolFailed),
 			},
 		},
 		{"none", nil},
 		{
 			"no version",
-			[]State{r("", "1234", "microsoft-go-infra-start", InProgressSymbol)},
+			[]State{r("", "1234", "microsoft-go-infra-start", ReportSymbolInProgress)},
 		},
 	}
 	for _, tt := range tests {
@@ -115,20 +115,20 @@ func Test_commentBody_body_UpdateExisting(t *testing.T) {
 	cb := commentBody{
 		reports: []State{
 			{
-				Version:       "1.2.3",
-				BuildPipeline: "microsoft-go",
-				BuildID:       "1234",
-				BuildSymbol:   InProgressSymbol,
-				// This test makes sure StartTime isn't updated, but BuildSymbol and LastUpdate are.
+				Version: "1.2.3",
+				Name:    "microsoft-go",
+				ID:      "1234",
+				Symbol:  ReportSymbolInProgress,
+				// This test makes sure StartTime isn't updated, but Symbol and LastUpdate are.
 				StartTime:  exampleTime,
 				LastUpdate: exampleTime,
 			},
 		},
 	}
 	cb.update(State{
-		BuildID:     "1234",
-		BuildSymbol: SuccessSymbol,
-		LastUpdate:  exampleTime.Add(time.Minute * 15),
+		ID:         "1234",
+		Symbol:     ReportSymbolSucceeded,
+		LastUpdate: exampleTime.Add(time.Minute * 15),
 	})
 	got, err := cb.body()
 	if err != nil {
