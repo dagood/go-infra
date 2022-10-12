@@ -241,7 +241,7 @@ func (c *commentBody) body() (string, error) {
 	var b strings.Builder
 	b.WriteString(c.before)
 	b.WriteString(beginDataSectionMarker)
-	b.WriteString("\n\n")
+	b.WriteString("\n")
 
 	sort.SliceStable(c.reports, func(i, j int) bool {
 		iv, jv := c.reports[i], c.reports[j]

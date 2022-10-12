@@ -21,21 +21,21 @@ func Test_parseReportComment(t *testing.T) {
 		{
 			"no-section",
 			args{"Comment body!"},
-			commentBody{"Comment body!", "", nil}},
+			commentBody{"Comment body!", "", nil, ""}},
 		{
 			"no-data",
 			args{"Before" + beginDataSectionMarker + "" + endDataSectionMarker + "After"},
-			commentBody{"Before", "After", nil},
+			commentBody{"Before", "After", nil, ""},
 		},
 		{
 			"data",
 			args{"Before" + beginDataSectionMarker + beginDataMarker + "[]" + endDataMarker + endDataSectionMarker + "After"},
-			commentBody{"Before", "After", make([]State, 0)},
+			commentBody{"Before", "After", make([]State, 0), ""},
 		},
 		{
 			"null",
 			args{"Before" + beginDataSectionMarker + beginDataMarker + "null" + endDataMarker + endDataSectionMarker + "After"},
-			commentBody{"Before", "After", nil},
+			commentBody{"Before", "After", nil, ""},
 		},
 	}
 	for _, tt := range tests {
@@ -53,7 +53,7 @@ func Test_commentBody_body(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := func(version, id, pipeline, symbol string) State {
+	r := func(version, id, pipeline string, symbol ReportSymbol) State {
 		b := State{
 			Version:    version,
 			ID:         id,
@@ -85,7 +85,7 @@ func Test_commentBody_body(t *testing.T) {
 		},
 		{"none", nil},
 		{
-			"no version",
+			"no-version",
 			[]State{r("", "1234", "microsoft-go-infra-start", ReportSymbolInProgress)},
 		},
 	}
