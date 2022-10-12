@@ -9,11 +9,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/go-github/github"
+	"github.com/microsoft/go-infra/gitcmd"
 	"github.com/microsoft/go-infra/githubutil"
 )
 
@@ -33,14 +36,40 @@ const endDataSectionMarker = "<!-- END " + dataSectionMarker + " -->"
 const beginDataMarker = "<!-- DATA "
 const endDataMarker = " DATA -->"
 
-const reportRetryTimeoutDuration = 5 * time.Minute
-const reportRetryDelayDuration = 5 * time.Second
+const reportRetryTimeoutDuration = time.Minute
+const reportRetryDelayDuration = 3 * time.Second
 
+const githubWikiDefaultBranch = "refs/heads/master"
+
+// UpdateIssue updates the given issue with new state. Requires the target GitHub repo to have the
+// wiki activated to perform safer concurrent updates than a simple issue description edit.
 func UpdateIssue(ctx context.Context, owner, repoName, pat string, issue int, s State) error {
 	client, err := githubutil.NewClient(ctx, pat)
 	if err != nil {
 		return err
 	}
+
+	// To handle concurrent edits, use Git and "git push".
+	//
+	// It would be preferable to stick with the GitHub API to avoid local data, but editing issue
+	// descriptions isn't safe concurrently. The ETags provided are weak, so If-Match doesn't work.
+	// If-Unmodified-Since seems to be ignored. The "update ref without force update" API allows
+	// forced updates if the API calls happen close together.
+	auther := gitcmd.GitHubPATAuther{PAT: pat}
+	// Use the wiki to store the data. This makes it visible without causing noise in the main repo.
+	url := "https://github.com/" + owner + "/" + repoName + ".wiki.git"
+
+	gitDir, err := gitcmd.NewTempGitRepo()
+	if err != nil {
+		return err
+	}
+	defer gitcmd.AttemptDelete(gitDir)
+
+	pageName := fmt.Sprintf("releasego-report-Data-%v", issue)
+	dataFilename := fmt.Sprintf("%v.md", pageName)
+	dataPath := filepath.Join(gitDir, dataFilename)
+
+	var body string
 
 	startTime := time.Now()
 	for {
@@ -52,46 +81,50 @@ func UpdateIssue(ctx context.Context, owner, repoName, pat string, issue int, s 
 		// githubutil.Retry is designed to handle infra flakiness and rate limiting. We want this,
 		// but we also want to handle potential concurrency issues. So: use two layers of retry.
 		err := githubutil.Retry(func() error {
-			syncRef, err := fetchLatestSyncRef(ctx, client, owner, repoName, issue)
-			if err != nil {
+			if err := gitcmd.Run(gitDir, "fetch", "--depth", "1", auther.InsertAuth(url), githubWikiDefaultBranch+":"+githubWikiDefaultBranch, "-f"); err != nil {
 				return err
 			}
-			log.Printf("sync hash: %#v\n", syncRef.GetObject().GetSHA())
-
-			existingBody, err := getRefReport(ctx, client, owner, repoName, syncRef)
-			if err != nil {
+			if err := gitcmd.Run(gitDir, "checkout", "-f", "--detach", githubWikiDefaultBranch); err != nil {
 				return err
+			}
+
+			var existingBody string
+			if existingBodyBytes, err := os.ReadFile(dataPath); err != nil {
+				log.Printf("Failed to read %q (%v), fetching issue content for initial commit", dataFilename, err)
+				githubIssue, _, err := client.Issues.Get(ctx, owner, repoName, issue)
+				if err != nil {
+					return err
+				}
+				existingBody = githubIssue.GetBody()
+			} else {
+				existingBody = string(existingBodyBytes)
 			}
 
 			rc := parseReportComment(existingBody)
 			rc.update(s)
-			body, err := rc.body()
+			rc.wikiURL = "https://github.com/" + owner + "/" + repoName + "/wiki/" + pageName
+			body, err = rc.body()
 			if err != nil {
 				return fmt.Errorf("unable to generate issue body: %v", err)
 			}
 
-			time.Sleep(time.Second * 2)
-
-			if err := updateSyncRef(ctx, client, owner, repoName, body, syncRef); err != nil {
+			if err := os.WriteFile(dataPath, []byte(body), 0666); err != nil {
 				return err
 			}
-
-			edit, _, err := client.Issues.Edit(ctx, owner, repoName, issue, &github.IssueRequest{
-				Body: &body,
-			})
-			if err != nil {
+			if err := gitcmd.Run(gitDir, "add", "--", dataFilename); err != nil {
 				return err
 			}
-
-			log.Printf("Edit successful:\n%v\n", edit.ID)
-			return nil
+			if err := gitcmd.Run(gitDir, "commit", "-m", "Update "+dataFilename); err != nil {
+				return err
+			}
+			return gitcmd.Run(gitDir, "push", auther.InsertAuth(url), "HEAD:"+githubWikiDefaultBranch)
 		})
 		if err != nil {
 			// Inner retry wasn't able to get the update done. This may be due to concurrency: N
 			// builds trying to update the issue at the same time. Try again after a short delay.
-			// (Nothing fancy: we aren't concerned about capacity contention. Even in the worst case
-			// of N updates happening simultaneously, repeatedly, all concurrent updates will
-			// eventually be able to get through because one update out of N succeeds each time.)
+			// (Nothing fancy: even in the worst case of N updates happening simultaneously,
+			// repeatedly, all concurrent updates will eventually be able to get through because one
+			// update out of N succeeds each time.)
 			log.Printf(
 				"Inner GitHub retry loop failed. Waiting %v then trying again. Will give up after %v. Error: %v\n",
 				reportRetryDelayDuration,
@@ -102,105 +135,26 @@ func UpdateIssue(ctx context.Context, owner, repoName, pat string, issue int, s 
 		}
 		break // Success.
 	}
-	return nil
-}
-
-const syncRefName = "refs/sync/dev/report-bot"
-const syncReportFile = "report.md"
-
-func fetchLatestSyncRef(ctx context.Context, client *github.Client, owner, repoName string, issue int) (*github.Reference, error) {
-	ref := fmt.Sprintf("%v/%v", syncRefName, issue)
-
-	getRef, _, err := client.Git.GetRef(ctx, owner, repoName, ref)
-	if err != nil {
-		log.Printf("Failed to get ref, attempting to create it as an orphan branch. The failure was: %v\n", err)
-
-		// Create a basic README because GitHub requires us to submit at least one file.
-		path := "README.md"
-		content := "This branch is used for 'releasego report' issue update synchronization."
-		mode := "100644"
-		tree, _, err := client.Git.CreateTree(ctx, owner, repoName, "", []github.TreeEntry{
-			{Path: &path, Content: &content, Mode: &mode},
-		})
+	// Now that we've successfully pushed, the data is saved, and we know it's the latest
+	// available data. Update the issue.
+	//
+	// There is potential for a conflict with another simultaneous UpdateIssue call here: if there
+	// is a delay between "push" and Edit, and another UpdateIssue call starts and finishes during
+	// that delay, this Edit will revert the issue to show old data!
+	//
+	// Mitigations: there isn't any known reason we'd have a long delay right here. The data
+	// itself is safe: the next UpdateIssue call will fix the issue and post the correct
+	// data. The report includes a link to the actual data in case it's important to get the
+	// real data during a release.
+	log.Printf("Copying report to https://github.com/%v/%v/issues/%v description...", owner, repoName, issue)
+	return githubutil.Retry(func() error {
+		edit, _, err := client.Issues.Edit(ctx, owner, repoName, issue, &github.IssueRequest{Body: &body})
 		if err != nil {
-			return nil, fmt.Errorf("failed to create tree for orphan branch: %v", err)
+			return err
 		}
-
-		commit, _, err := client.Git.CreateCommit(ctx, owner, repoName, &github.Commit{
-			Message: &ref,
-			Tree:    tree,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create commit for orphan branch: %v", err)
-		}
-
-		newRef, _, err := client.Git.CreateRef(ctx, owner, repoName, &github.Reference{
-			Ref: &ref,
-			Object: &github.GitObject{
-				SHA: commit.SHA,
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create ref for orphan branch %q %v: %v", ref, commit.GetSHA(), err)
-		}
-		log.Printf("Created ref %q at %q\n", ref, commit.GetSHA())
-		return newRef, nil
-	}
-	return getRef, nil
-}
-
-func updateSyncRef(ctx context.Context, client *github.Client, owner, repoName, content string, syncRef *github.Reference) error {
-	path := syncReportFile
-	mode := "100644"
-	tree, _, err := client.Git.CreateTree(ctx, owner, repoName, "", []github.TreeEntry{
-		{Path: &path, Content: &content, Mode: &mode},
+		log.Printf("Edit successful:\n%v\n", edit.ID)
+		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	message := "Update"
-	commit, _, err := client.Git.CreateCommit(ctx, owner, repoName, &github.Commit{
-		Parents: []github.Commit{
-			{SHA: syncRef.GetObject().SHA},
-		},
-		Message: &message,
-		Tree:    tree,
-	})
-	if err != nil {
-		return err
-	}
-
-	note := fmt.Sprintf("update %v from %v to %v", syncRef.GetRef(), syncRef.GetObject().GetSHA(), commit.GetSHA())
-	// Do a non-force push to fail if someone else got it done first.
-	_, _, err = client.Git.UpdateRef(ctx, owner, repoName, &github.Reference{
-		Ref: syncRef.Ref,
-		Object: &github.GitObject{
-			SHA: commit.SHA,
-		},
-	}, false)
-	if err != nil {
-		return fmt.Errorf("failed %v %v", note, err)
-	}
-	log.Printf("Completed: %v\n", note)
-	return nil
-}
-
-func getRefReport(ctx context.Context, client *github.Client, owner, repoName string, ref *github.Reference) (string, error) {
-	tree, _, err := client.Git.GetTree(ctx, owner, repoName, ref.GetObject().GetSHA(), false)
-	if err != nil {
-		return "", err
-	}
-	for _, e := range tree.Entries {
-		if *e.Path == syncReportFile {
-			content, _, err := client.Git.GetBlobRaw(ctx, owner, repoName, e.GetSHA())
-			if err != nil {
-				return "", err
-			}
-			return string(content), nil
-		}
-	}
-	return "", nil
 }
 
 type State struct {
@@ -222,6 +176,9 @@ type State struct {
 type commentBody struct {
 	before, after string
 	reports       []State
+	// wikiURL links to the data source for the comment body, if any. This is a pointer to a GitHub
+	// wiki page used to synchronize updates.
+	wikiURL string
 }
 
 func parseReportComment(body string) commentBody {
@@ -233,7 +190,10 @@ func parseReportComment(body string) commentBody {
 			if err != nil {
 				log.Printf("Unable to read report data from comment: %v\n%v\n", err, data)
 			}
-			return commentBody{before, after, r}
+			return commentBody{
+				before: before, after: after,
+				reports: r,
+			}
 		}
 	}
 	// Either the BEGIN/END markers couldn't be found, or DATA couldn't be found. Keep before and
@@ -324,12 +284,12 @@ func (c *commentBody) body() (string, error) {
 		b.WriteString("| ")
 		if r.URL != "" {
 			b.WriteString("[")
-			b.WriteString(r.ID)
+		}
+		b.WriteString(r.ID)
+		if r.URL != "" {
 			b.WriteString("](")
 			b.WriteString(r.URL)
 			b.WriteString(")")
-			b.WriteString(" | ")
-			b.WriteString(string(r.Symbol))
 			// If the build has failed (potentially needs retry) and is a release infra build
 			// (likely publishes detailed retry information on the "Extensions" tab), then show a
 			// direct link. This detection might not be 100% accurate, but it's just a small
@@ -340,6 +300,8 @@ func (c *commentBody) body() (string, error) {
 				b.WriteString("&view=ms.vss-build-web.run-extensions-tab)")
 			}
 		}
+		b.WriteString(" | ")
+		b.WriteString(string(r.Symbol))
 		b.WriteString(" | ")
 		if r.StartTime != (time.Time{}) {
 			b.WriteString(r.StartTime.Format("2006-01-02 15:04"))
@@ -352,6 +314,12 @@ func (c *commentBody) body() (string, error) {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
+
+	if c.wikiURL != "" {
+		b.WriteString("<sub>This data is maintained in a [GitHub wiki page](")
+		b.WriteString(c.wikiURL)
+		b.WriteString("). The text above is a complete copy.</sub>\n\n")
+	}
 
 	b.WriteString(beginDataMarker)
 	bytes, err := json.MarshalIndent(c.reports, "", "  ")

@@ -39,8 +39,8 @@ func handleReport(p subcmd.ParseFunc) error {
 	issue := flag.Int("i", 0, "[Required] The issue number to add the comment to.")
 
 	status := flag.String("build-status", "", "The current Agent.JobStatus value.")
-	buildID := flag.String("build-id", "", "The build ID to report.")
 	buildPipeline := flag.String("build-pipeline", "", "The name of the build pipeline.")
+	buildID := flag.String("build-id", "", "The build ID to report.")
 	start := flag.Bool("build-start", false, "Assign the current time as the start time of the reported build.")
 
 	version := flag.String(
@@ -77,7 +77,6 @@ func handleReport(p subcmd.ParseFunc) error {
 		s.StartTime = s.LastUpdate
 	}
 	// Assume we're always reporting on a build in the same collection/project as the current build.
-	// If this is no longer true
 	s.URL = azdo.GetBuildURL(azdo.GetEnvCollectionURI(), azdo.GetEnvProject(), s.ID)
 
 	buildStatus := azdo.GetEnvAgentJobStatus()
@@ -101,43 +100,24 @@ func handleReport(p subcmd.ParseFunc) error {
 	log.Printf("Reporting %#v\n", s)
 
 	ctx := context.Background()
-
-	//if err := buildreport.UpdateIssue(ctx, owner, name, *pat, *issue, s); err != nil {
-	//	return err
-	//}
-
-	client, err := githubutil.NewClient(ctx, *pat)
-	if err != nil {
+	if err := buildreport.UpdateIssue(ctx, owner, name, *pat, *issue, s); err != nil {
 		return err
 	}
 
-	log.Println("Before")
-	d := func(i int) {
-		log.Println("Hi")
-		s2 := s
-		s2.ID += strconv.Itoa(i)
-		s2.Name += strconv.Itoa(i)
-		if err := buildreport.UpdateIssue(ctx, owner, name, *pat, *issue, s2); err != nil {
-			log.Fatal(err)
-			//return err
-		}
-	}
-	//d()
-	go d(1)
-	go d(2)
-	go d(3)
-	go d(4)
-	go d(5)
-	time.Sleep(time.Minute * 5)
-
 	if s.Symbol == buildreport.ReportSymbolFailed {
+		client, err := githubutil.NewClient(ctx, *pat)
+		if err != nil {
+			return err
+		}
+
 		if err := githubutil.Retry(func() error {
 			body, err := buildreport.SingleStateBody(&s)
 			if err != nil {
 				return err
 			}
 
-			updateMessage := "Build failure: " + body
+			url := "https://github.com/" + owner + "/" + name + "/issues/" + strconv.Itoa(*issue)
+			updateMessage := "Build failure! See the [issue description](" + url + ") for the latest status." + body
 
 			c, _, err := client.Issues.CreateComment(
 				ctx, owner, name, *issue, &github.IssueComment{Body: &updateMessage})
