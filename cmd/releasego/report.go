@@ -8,7 +8,6 @@ import (
 	"errors"
 	"flag"
 	"log"
-	"math/rand"
 	"strconv"
 	"time"
 
@@ -113,21 +112,23 @@ func handleReport(p subcmd.ParseFunc) error {
 	}
 
 	log.Println("Before")
-	d := func() {
+	d := func(i int) {
 		log.Println("Hi")
 		s2 := s
-		s2.ID += strconv.Itoa(rand.Int())
-		s2.Name += strconv.Itoa(rand.Int())
+		s2.ID += strconv.Itoa(i)
+		s2.Name += strconv.Itoa(i)
 		if err := buildreport.UpdateIssue(ctx, owner, name, *pat, *issue, s2); err != nil {
 			log.Fatal(err)
 			//return err
 		}
 	}
-	d()
-	//go d()
-	//go d()
-	//go d()
-	//time.Sleep(time.Minute * 5)
+	//d()
+	go d(1)
+	go d(2)
+	go d(3)
+	go d(4)
+	go d(5)
+	time.Sleep(time.Minute * 5)
 
 	if s.Symbol == buildreport.ReportSymbolFailed {
 		if err := githubutil.Retry(func() error {

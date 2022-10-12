@@ -56,7 +56,7 @@ func UpdateIssue(ctx context.Context, owner, repoName, pat string, issue int, s 
 			if err != nil {
 				return err
 			}
-			log.Printf("sync hash: %#v\n", syncRef)
+			log.Printf("sync hash: %#v\n", syncRef.GetObject().GetSHA())
 
 			existingBody, err := getRefReport(ctx, client, owner, repoName, syncRef)
 			if err != nil {
@@ -83,33 +83,7 @@ func UpdateIssue(ctx context.Context, owner, repoName, pat string, issue int, s 
 				return err
 			}
 
-			// We need to create our own request because the github library doesn't support passing
-			// extra headers. The request creation and sending logic is copied from the library. We
-			// need the "If-Unmodified-Since" header to ensure we don't lose data with concurrent
-			// read+modify+write execution. (GitHub returns weak ETags, so we can't use "If-Match".)
-			editURL := fmt.Sprintf("repos/%v/%v/issues/%d", owner, repoName, issue)
-			req, err := client.NewRequest("PATCH", editURL, &github.IssueRequest{
-				Body: &body,
-			})
-			if err != nil {
-				return fmt.Errorf("unable to create PATCH request: %v", err)
-			}
-
-			log.Printf("Response: %v\n", r.Header)
-
-			lastEdit := r.Header.Get("Last-Modified")
-			lastEdit = "Demonday, 42 Oct 1283 8:17:10 GMT"
-			req.Header.Add("If-Unmodified-Since", lastEdit)
-
-			log.Printf("Request: %#v\n", req.Header)
-
-			var editedIssue github.Issue
-			resp, err := client.Do(ctx, req, &editedIssue)
-			if err != nil {
-				return fmt.Errorf("unable to send PATCH request: %v", err)
-			}
-
-			log.Printf("Edit successful:\n%v\n%v\n", editedIssue, resp)
+			log.Printf("Edit successful:\n%v\n", edit.ID)
 			return nil
 		})
 		if err != nil {
@@ -139,7 +113,7 @@ func fetchLatestSyncRef(ctx context.Context, client *github.Client, owner, repoN
 
 	getRef, _, err := client.Git.GetRef(ctx, owner, repoName, ref)
 	if err != nil {
-		log.Printf("Failed to get ref, attempting to create it as an orphan branch. Failure: %v\n", err)
+		log.Printf("Failed to get ref, attempting to create it as an orphan branch. The failure was: %v\n", err)
 
 		// Create a basic README because GitHub requires us to submit at least one file.
 		path := "README.md"
@@ -149,7 +123,7 @@ func fetchLatestSyncRef(ctx context.Context, client *github.Client, owner, repoN
 			{Path: &path, Content: &content, Mode: &mode},
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create tree for orphan branch: %v", err)
 		}
 
 		commit, _, err := client.Git.CreateCommit(ctx, owner, repoName, &github.Commit{
@@ -157,7 +131,7 @@ func fetchLatestSyncRef(ctx context.Context, client *github.Client, owner, repoN
 			Tree:    tree,
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create commit for orphan branch: %v", err)
 		}
 
 		newRef, _, err := client.Git.CreateRef(ctx, owner, repoName, &github.Reference{
@@ -167,8 +141,9 @@ func fetchLatestSyncRef(ctx context.Context, client *github.Client, owner, repoN
 			},
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create ref for orphan branch %q %v: %v", ref, commit.GetSHA(), err)
 		}
+		log.Printf("Created ref %q at %q\n", ref, commit.GetSHA())
 		return newRef, nil
 	}
 	return getRef, nil
@@ -186,6 +161,9 @@ func updateSyncRef(ctx context.Context, client *github.Client, owner, repoName, 
 
 	message := "Update"
 	commit, _, err := client.Git.CreateCommit(ctx, owner, repoName, &github.Commit{
+		Parents: []github.Commit{
+			{SHA: syncRef.GetObject().SHA},
+		},
 		Message: &message,
 		Tree:    tree,
 	})
@@ -193,6 +171,7 @@ func updateSyncRef(ctx context.Context, client *github.Client, owner, repoName, 
 		return err
 	}
 
+	note := fmt.Sprintf("update %v from %v to %v", syncRef.GetRef(), syncRef.GetObject().GetSHA(), commit.GetSHA())
 	// Do a non-force push to fail if someone else got it done first.
 	_, _, err = client.Git.UpdateRef(ctx, owner, repoName, &github.Reference{
 		Ref: syncRef.Ref,
@@ -201,8 +180,9 @@ func updateSyncRef(ctx context.Context, client *github.Client, owner, repoName, 
 		},
 	}, false)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed %v %v", note, err)
 	}
+	log.Printf("Completed: %v\n", note)
 	return nil
 }
 
@@ -220,7 +200,7 @@ func getRefReport(ctx context.Context, client *github.Client, owner, repoName st
 			return string(content), nil
 		}
 	}
-	return "", fmt.Errorf("unable to find %q in commit %q", syncReportFile, ref.GetObject().GetSHA())
+	return "", nil
 }
 
 type State struct {
