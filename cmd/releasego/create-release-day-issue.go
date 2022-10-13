@@ -64,10 +64,11 @@ func handleCreateReleaseDayIssue(p subcmd.ParseFunc) error {
 	sort.Strings(releases)
 
 	title := time.Now().UTC().Format("2006-01-02") + " releases: " + strings.Join(releases, ", ")
-	desc := "This issue tracks the status of multiple ongoing microsoft/go releases and the " +
-		"image release from [microsoft/go-images](https://github.com/microsoft/go-images). " +
-		"I (a bot) will keep the table up to date, and add a comment when something fails.\n\n" +
-		docPointerMarkdown
+	desc := "This issue tracks the status of ongoing microsoft/go releases and the image release " +
+		"from [microsoft/go-images](https://github.com/microsoft/go-images). " +
+		"I am a bot, and I'll keep the issue up to date and add a comment when I notice " +
+		"something happen that likely requires the release runner to take some manual action." +
+		"\n\n" + docPointerMarkdown
 
 	if *notify != "" {
 		desc += "\n\n/cc @" + *notify
