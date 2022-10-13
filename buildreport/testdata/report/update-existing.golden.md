@@ -14,7 +14,7 @@
     "Version": "1.2.3",
     "Name": "microsoft-go",
     "URL": "",
-    "Symbol": "✅",
+    "Status": "✅",
     "LastUpdate": "2012-03-28T01:17:03Z",
     "StartTime": "2012-03-28T01:02:03Z"
   }

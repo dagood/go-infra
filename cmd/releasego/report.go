@@ -38,9 +38,13 @@ func handleReport(p subcmd.ParseFunc) error {
 	pat := githubutil.BindPATFlag()
 	issue := flag.Int("i", 0, "[Required] The issue number to add the comment to.")
 
-	status := flag.String("build-status", "", "The current Agent.JobStatus value.")
-	buildPipeline := flag.String("build-pipeline", "", "The name of the build pipeline.")
-	buildID := flag.String("build-id", "", "The build ID to report.")
+	status := flag.String(
+		"build-status", "",
+		"[Required] The current build status. Converted to a symbol if it is an Agent.JobStatus value, 'InProgress', or 'NotStarted'.")
+
+	buildPipeline := flag.String("build-pipeline", "", "[Required] The name of the build pipeline.")
+	buildID := flag.String("build-id", "", "[Required] The build ID to report.")
+
 	start := flag.Bool("build-start", false, "Assign the current time as the start time of the reported build.")
 
 	version := flag.String(
@@ -55,6 +59,15 @@ func handleReport(p subcmd.ParseFunc) error {
 	if *issue == 0 {
 		return errors.New("no issue specified")
 	}
+	if *status == "" {
+		return errors.New("no build-status specified")
+	}
+	if *buildPipeline == "" {
+		return errors.New("no build-pipeline specified")
+	}
+	if *buildID == "" {
+		return errors.New("no build-id specified")
+	}
 
 	owner, name, err := githubutil.ParseRepoFlag(repo)
 	if err != nil {
@@ -63,15 +76,9 @@ func handleReport(p subcmd.ParseFunc) error {
 
 	s := buildreport.State{
 		Version:    *version,
-		Name:       azdo.GetEnvDefinitionName(),
-		ID:         azdo.GetEnvBuildID(),
+		Name:       *buildPipeline,
+		ID:         *buildID,
 		LastUpdate: time.Now().UTC(),
-	}
-	if *buildPipeline != "" {
-		s.Name = *buildPipeline
-	}
-	if *buildID != "" {
-		s.ID = *buildID
 	}
 	if *start {
 		s.StartTime = s.LastUpdate
@@ -87,14 +94,16 @@ func handleReport(p subcmd.ParseFunc) error {
 	switch buildStatus {
 	// Handle possible AzDO env values.
 	case "Succeeded", "SucceededWithIssues":
-		s.Symbol = buildreport.ReportSymbolSucceeded
+		s.Status = buildreport.SymbolSucceeded
 	case "Canceled", "Failed":
-		s.Symbol = buildreport.ReportSymbolFailed
+		s.Status = buildreport.SymbolFailed
 	// Handle values that are passed in manually, not provided by Agent.JobStatus.
 	case "InProgress":
-		s.Symbol = buildreport.ReportSymbolInProgress
+		s.Status = buildreport.SymbolInProgress
 	case "NotStarted":
-		s.Symbol = buildreport.ReportSymbolNotStarted
+		s.Status = buildreport.SymbolNotStarted
+	default:
+		s.Status = buildStatus
 	}
 
 	log.Printf("Reporting %#v\n", s)
@@ -104,7 +113,7 @@ func handleReport(p subcmd.ParseFunc) error {
 		return err
 	}
 
-	if s.Symbol == buildreport.ReportSymbolFailed {
+	if s.Status == buildreport.SymbolFailed {
 		client, err := githubutil.NewClient(ctx, *pat)
 		if err != nil {
 			return err

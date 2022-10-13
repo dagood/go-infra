@@ -14,7 +14,7 @@ Text before the report.
     "Version": "",
     "Name": "microsoft-go-infra-start",
     "URL": "https://example.org/",
-    "Symbol": "🏃",
+    "Status": "🏃",
     "LastUpdate": "2012-03-28T01:07:03Z",
     "StartTime": "2012-03-28T01:02:03Z"
   }

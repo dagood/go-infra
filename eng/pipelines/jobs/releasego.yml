@@ -68,6 +68,13 @@ jobs:
 
       - template: ../steps/set-bot-git-author.yml
 
+      - template: ../steps/report.yml
+        parameters:
+          releaseIssue: ${{ parameters.releaseIssue }}
+          reason: Start
+          buildStatus: InProgress
+          start: true
+
       - script: |
           go install ./cmd/releasego
           echo "##vso[task.prependpath]$(go env GOPATH)/bin"
@@ -88,21 +95,15 @@ jobs:
           displayName: 🔁 Add "Extensions" tab retry instructions
           condition: always()
 
-      - ${{ if ne(parameters.releaseIssue, 'nil') }}:
-        - script: |
-            releasego report \
-              -i '${{ parameters.releaseIssue }}' \
-              -m ':white_check_mark: Successfully ran ${{ parameters.reportDescription }}' \
-              -repo '$(TargetGitHubRepo)' \
-              -pat '$(GitHubPAT)'
-          displayName: Report Success
-          condition: succeeded()
-        - script: |
-            releasego report \
-              $(instructionsLinkArg) \
-              -i '${{ parameters.releaseIssue }}' \
-              -m ':rotating_light: Failed to run ${{ parameters.reportDescription }}' \
-              -repo '$(TargetGitHubRepo)' \
-              -pat '$(GitHubPAT)'
-          displayName: Report Failure
-          condition: failed()
+      - template: ../steps/report.yml
+        parameters:
+          releaseIssue: ${{ parameters.releaseIssue }}
+          reason: Completion
+
+      - script: exit 1
+        displayName: Cause failure
+
+      - template: ../steps/report.yml
+        parameters:
+          releaseIssue: ${{ parameters.releaseIssue }}
+          reason: Completion, Simulate Failure

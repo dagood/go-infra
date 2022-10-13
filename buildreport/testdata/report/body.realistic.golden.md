@@ -47,7 +47,7 @@ Text before the report.
     "Version": "1.18.2-1",
     "Name": "microsoft-go",
     "URL": "https://example.org/",
-    "Symbol": "❌",
+    "Status": "❌",
     "LastUpdate": "2012-03-28T01:07:03Z",
     "StartTime": "2012-03-28T01:02:03Z"
   },
@@ -56,7 +56,7 @@ Text before the report.
     "Version": "1.18.2-1",
     "Name": "microsoft-go-infra-release-build",
     "URL": "https://example.org/",
-    "Symbol": "❌",
+    "Status": "❌",
     "LastUpdate": "2012-03-28T01:07:03Z",
     "StartTime": "2012-03-28T01:02:03Z"
   },
@@ -65,7 +65,7 @@ Text before the report.
     "Version": "1.18.2-1",
     "Name": "microsoft-go-infra-release-build",
     "URL": "https://example.org/",
-    "Symbol": "✅",
+    "Status": "✅",
     "LastUpdate": "2012-03-28T01:07:03Z",
     "StartTime": "2012-03-28T01:02:03Z"
   },
@@ -74,7 +74,7 @@ Text before the report.
     "Version": "1.18.2-1",
     "Name": "microsoft-go-infra-release-build",
     "URL": "https://example.org/",
-    "Symbol": "🏃",
+    "Status": "🏃",
     "LastUpdate": "2012-03-28T01:07:03Z",
     "StartTime": "2012-03-28T01:02:03Z"
   },
@@ -83,7 +83,7 @@ Text before the report.
     "Version": "1.18.2-1",
     "Name": "microsoft-go-infra-release-build",
     "URL": "https://example.org/",
-    "Symbol": "⌚",
+    "Status": "⌚",
     "LastUpdate": "2012-03-28T01:07:03Z",
     "StartTime": "2012-03-28T01:02:03Z"
   },
@@ -92,7 +92,7 @@ Text before the report.
     "Version": "1.18.2-1",
     "Name": "microsoft-go-infra-release-go-images",
     "URL": "https://example.org/",
-    "Symbol": "🏃",
+    "Status": "🏃",
     "LastUpdate": "2012-03-28T01:07:03Z",
     "StartTime": "2012-03-28T01:02:03Z"
   },
@@ -101,7 +101,7 @@ Text before the report.
     "Version": "1.18.2-1-fips",
     "Name": "microsoft-go-infra-release-build",
     "URL": "https://example.org/",
-    "Symbol": "❌",
+    "Status": "❌",
     "LastUpdate": "2012-03-28T01:07:03Z",
     "StartTime": "2012-03-28T01:02:03Z"
   },
@@ -110,7 +110,7 @@ Text before the report.
     "Version": "1.19.1-1",
     "Name": "microsoft-go-infra-release-build",
     "URL": "https://example.org/",
-    "Symbol": "⌚",
+    "Status": "⌚",
     "LastUpdate": "2012-03-28T01:07:03Z",
     "StartTime": "2012-03-28T01:02:03Z"
   }
