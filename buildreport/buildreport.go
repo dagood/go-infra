@@ -65,7 +65,7 @@ func UpdateIssue(ctx context.Context, owner, repoName, pat string, issue int, s 
 	}
 	defer gitcmd.AttemptDelete(gitDir)
 
-	pageName := fmt.Sprintf("releasego-report-Data-%v", issue)
+	pageName := fmt.Sprintf("releasego-report-for-issue-%v", issue)
 	dataFilename := fmt.Sprintf("%v.md", pageName)
 	dataPath := filepath.Join(gitDir, dataFilename)
 
