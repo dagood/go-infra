@@ -3,6 +3,8 @@ package main
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/microsoft/go-infra/goldentest"
 )
 
 func Test_generateContent(t *testing.T) {
@@ -30,7 +32,7 @@ func Test_generateContent(t *testing.T) {
 				t.Errorf("generateContent() error = %v", err)
 				return
 			}
-			checkGolden(t, "Test_generateContent ", filepath.Join("testdata", "retry-instructions", tt.name+".golden.md"), got)
+			goldentest.Check(t, "Test_generateContent ", filepath.Join("testdata", "retry-instructions", tt.name+".golden.md"), got)
 		})
 	}
 }

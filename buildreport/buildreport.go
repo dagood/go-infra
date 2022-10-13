@@ -318,7 +318,7 @@ func (c *commentBody) body() (string, error) {
 	if c.wikiURL != "" {
 		b.WriteString("<sub>This data is maintained in a [GitHub wiki page](")
 		b.WriteString(c.wikiURL)
-		b.WriteString("). The text above is a complete copy.</sub>\n\n")
+		b.WriteString("). The text above is a complete copy. Edits to the GitHub issue will be discarded.</sub>\n\n")
 	}
 
 	b.WriteString(beginDataMarker)
