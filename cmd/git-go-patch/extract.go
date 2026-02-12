@@ -220,9 +220,9 @@ func handleExtract(p subcmd.ParseFunc) error {
 			if err != nil {
 				return err
 			}
-			defer modifiedFile.Close()
 
 			if _, err := modifiedFile.WriteString(p.String()); err != nil {
+				modifiedFile.Close()
 				return fmt.Errorf("unable to write patch to %#q: %v", path, err)
 			}
 			if err := modifiedFile.Close(); err != nil {
