@@ -78,7 +78,7 @@ jobs:
               repo,
               tag_name: tagName,
               name: tagName,
-              target_commitish: context.payload.repository.default_branch,
+              target_commitish: context.payload.repository.default_branch || 'main',
               generate_release_notes: true,
             });
             core.notice(`Created ${tagName}: ${release.html_url}`);
