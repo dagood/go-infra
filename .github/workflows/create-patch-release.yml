@@ -1,0 +1,84 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+name: Create patch release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Calculate the next v0.0.x release without creating it.
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: create-patch-release
+  cancel-in-progress: false
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create next v0.0.x release
+        id: release
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          DRY_RUN: ${{ inputs.dry-run }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const versionPattern = /^v0\.0\.(\d+)$/;
+            let highestPatch = -1;
+
+            for (let page = 1; ; page++) {
+              const { data: refs } = await github.rest.git.listMatchingRefs({
+                owner,
+                repo,
+                ref: 'tags/v0.0.',
+                per_page: 100,
+                page,
+              });
+              for (const ref of refs) {
+                const tagName = ref.ref.replace(/^refs\/tags\//, '');
+                const match = versionPattern.exec(tagName);
+                if (match) {
+                  highestPatch = Math.max(highestPatch, Number(match[1]));
+                }
+              }
+              if (refs.length < 100) {
+                break;
+              }
+            }
+
+            if (highestPatch < 0) {
+              core.setFailed('No existing v0.0.x tags found.');
+              return;
+            }
+
+            const tagName = `v0.0.${highestPatch + 1}`;
+            core.setOutput('tag-name', tagName);
+            await core.summary
+              .addHeading('Patch release')
+              .addRaw(`Next release: ${tagName}`)
+              .addBreak()
+              .addRaw(`Dry run: ${process.env.DRY_RUN}`)
+              .write();
+
+            if (process.env.DRY_RUN === 'true') {
+              core.notice(`Dry run: would create ${tagName}.`);
+              return;
+            }
+
+            const { data: release } = await github.rest.repos.createRelease({
+              owner,
+              repo,
+              tag_name: tagName,
+              name: tagName,
+              target_commitish: context.payload.repository.default_branch,
+              generate_release_notes: true,
+            });
+            core.notice(`Created ${tagName}: ${release.html_url}`);
