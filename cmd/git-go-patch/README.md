@@ -207,6 +207,18 @@ git go-patch apply
 # Proj and proj's submodule are now ready to examine.
 ```
 
+To speed up cloning a submodule, set `GIT_GO_PATCH_SUBMODULE_REFERENCES` to comma-separated pairs of
+submodule repository URLs and local reference repository paths. Whitespace around each value is
+ignored. For example:
+
+```sh
+export GIT_GO_PATCH_SUBMODULE_REFERENCES='https://github.com/golang/go,/home/me/git/go, https://github.com/docker-library/golang,/home/me/git/docker-library-golang'
+git go-patch apply
+```
+
+When a configured URL matches the submodule URL, `git-go-patch` passes the corresponding path to
+`git submodule update` using `--reference`.
+
 However, in build scripts, you may want to use traditional Git commands to avoid the dependency on the `git-go-patch` tool in production environments.
 We suggest:
 
