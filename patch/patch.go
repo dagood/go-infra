@@ -166,9 +166,6 @@ func ReadFile(path string) (*Patch, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := f.Close(); err != nil {
-		return nil, err
-	}
 	return p, nil
 }
 

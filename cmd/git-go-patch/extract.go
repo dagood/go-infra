@@ -241,9 +241,9 @@ func extractPatches(config *patch.FoundConfig, since string, verbatim, keepTemp 
 			if err != nil {
 				return err
 			}
-			defer modifiedFile.Close()
 
 			if _, err := modifiedFile.WriteString(p.String()); err != nil {
+				modifiedFile.Close()
 				return fmt.Errorf("unable to write patch to %#q: %v", path, err)
 			}
 			if err := modifiedFile.Close(); err != nil {

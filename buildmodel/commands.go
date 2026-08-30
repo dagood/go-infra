@@ -640,9 +640,12 @@ func copyFile(src, dst string) (err error) {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if closeErr := d.Close(); err == nil {
+			err = closeErr
+		}
+	}()
 
-	if _, err := io.Copy(d, s); err != nil {
-		return err
-	}
-	return d.Close()
+	_, err = io.Copy(d, s)
+	return err
 }

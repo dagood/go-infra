@@ -16,7 +16,7 @@ type BackendResponse struct {
 	Errors        []BackendResponseError `json:"errors"`
 }
 
-func (r *BackendResponse) IsSucess() bool {
+func (r *BackendResponse) IsSuccess() bool {
 	return r.ItemsReceived == r.ItemsAccepted
 }
 
@@ -28,5 +28,5 @@ type BackendResponseError struct {
 }
 
 func (r BackendResponseError) Error() string {
-	return fmt.Errorf("index: %d, statusCode: %d, message: %s", r.Index, r.StatusCode, r.Message).Error()
+	return fmt.Sprintf("index: %d, statusCode: %d, message: %s", r.Index, r.StatusCode, r.Message)
 }
